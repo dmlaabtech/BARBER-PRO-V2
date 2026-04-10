@@ -51,10 +51,11 @@ model PendingRegistration {
 
 model Plan {
   id              String   @id @default(uuid())
-  name            String   // Basic, Pro, Premium
+  name            String   // Premium
   maxBarbers      Int
   maxAppointments Int
   price           Decimal  @db.Decimal(10, 2)
+  stripePriceId   String?  @unique // <--- O link com o Stripe entra aqui
   features        String   // JSON stringified array
   tenants         Tenant[]
 }
