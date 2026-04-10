@@ -12,137 +12,102 @@ const bookingSchema = z.object({
   serviceId: z.string().uuid(),
 });
 
-// GET /api/public/booking/:slug — dados públicos da barbearia
-router.get(
-  "/booking/:slug",
-  async (req: Request, res: Response, next: NextFunction) => {
-    const slug = req.params.slug as string;
-
-    try {
-      const tenant = await prisma.tenant.findUnique({
-        where: { slug },
-        include: {
-          services: { where: { active: true } },
-          barbers: { where: { active: true } },
-        },
-      });
-
-      if (!tenant) {
-        return res.status(404).json({ error: "Barbearia não encontrada" });
-      }
-
-      res.json(tenant);
-    } catch (error) {
-      next(error);
-    }
+router.get("/booking/:slug", async (req: Request, res: Response, next: NextFunction) => {
+  const slug = req.params.slug as string;
+  try {
+    const tenant = await prisma.tenant.findUnique({
+      where: { slug },
+      include: {
+        services: { where: { active: true } },
+        barbers: { where: { active: true } },
+      },
+    });
+    if (!tenant) return res.status(404).json({ error: "Barbearia não encontrada" });
+    res.json(tenant);
+  } catch (error) {
+    next(error);
   }
-);
+});
 
-// GET /api/public/booking/:slug/availability — horários ocupados
-router.get(
-  "/booking/:slug/availability",
-  async (req: Request, res: Response, next: NextFunction) => {
-    const slug = req.params.slug as string;
-    const date = String(req.query.date);
-    const barberId = String(req.query.barberId);
+router.get("/booking/:slug/availability", async (req: Request, res: Response, next: NextFunction) => {
+  const slug = req.params.slug as string;
+  const date = String(req.query.date);
+  const barberId = String(req.query.barberId);
 
-    if (!date || !barberId || date === "undefined" || barberId === "undefined") {
-      return res
-        .status(400)
-        .json({ error: "Data e barbeiro são obrigatórios" });
-    }
-
-    try {
-      const tenant = await prisma.tenant.findUnique({ where: { slug } });
-
-      if (!tenant) {
-        return res.status(404).json({ error: "Barbearia não encontrada" });
-      }
-
-      const [year, month, day] = date.split("-").map(Number);
-      const startOfDay = new Date(year, month - 1, day, 0, 0, 0);
-      const endOfDay = new Date(year, month - 1, day, 23, 59, 59);
-
-      const appointments = await prisma.appointment.findMany({
-        where: {
-          tenantId: tenant.id,
-          barberId,
-          status: { notIn: ["CANCELED"] },
-          date: { gte: startOfDay, lte: endOfDay },
-        },
-        select: { date: true },
-      });
-
-      const bookedTimes = appointments.map((app) =>
-        app.date.toLocaleTimeString("pt-BR", {
-          timeZone: "America/Sao_Paulo",
-          hour: "2-digit",
-          minute: "2-digit",
-        })
-      );
-
-      res.json({ bookedTimes });
-    } catch (error) {
-      next(error);
-    }
+  if (!date || !barberId || date === "undefined" || barberId === "undefined") {
+    return res.status(400).json({ error: "Data e barbeiro são obrigatórios" });
   }
-);
 
-// POST /api/public/booking/:slug/appointment — criar agendamento público
-router.post(
-  "/booking/:slug/appointment",
-  async (req: Request, res: Response, next: NextFunction) => {
-    const slug = req.params.slug as string;
+  try {
+    const tenant = await prisma.tenant.findUnique({ where: { slug } });
+    if (!tenant) return res.status(404).json({ error: "Barbearia não encontrada" });
 
-    const result = bookingSchema.safeParse(req.body);
-    if (!result.success) {
-      return res.status(400).json({ error: result.error.flatten() });
-    }
+    const [year, month, day] = date.split("-").map(Number);
+    const startOfDay = new Date(year, month - 1, day, 0, 0, 0);
+    const endOfDay = new Date(year, month - 1, day, 23, 59, 59);
 
-    const { clientName, clientPhone, date, barberId, serviceId } = result.data;
+    const appointments = await prisma.appointment.findMany({
+      where: {
+        tenantId: tenant.id,
+        barberId,
+        status: { notIn: ["CANCELED"] },
+        date: { gte: startOfDay, lte: endOfDay },
+      },
+      select: { date: true },
+    });
 
-    try {
-      const tenant = await prisma.tenant.findUnique({ where: { slug } });
+    const bookedTimes = appointments.map((app) =>
+      app.date.toLocaleTimeString("pt-BR", {
+        timeZone: "America/Sao_Paulo",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    );
 
-      if (!tenant) {
-        return res.status(404).json({ error: "Barbearia não encontrada" });
-      }
-
-      const service = await prisma.service.findUnique({
-        where: { id: serviceId },
-      });
-
-      if (!service) {
-        return res.status(404).json({ error: "Serviço não encontrado" });
-      }
-
-      let client = await prisma.client.findFirst({
-        where: { phone: clientPhone, tenantId: tenant.id },
-      });
-
-      if (!client) {
-        client = await prisma.client.create({
-          data: { name: clientName, phone: clientPhone, tenantId: tenant.id },
-        });
-      }
-
-      const appointment = await prisma.appointment.create({
-        data: {
-          date: new Date(date),
-          clientId: client.id,
-          barberId,
-          serviceId,
-          totalPrice: service.price,
-          tenantId: tenant.id,
-          status: "PENDING",
-        },
-      });
-
-      res.status(201).json(appointment);
-    } catch (error) {
-      next(error);
-    }
+    res.json({ bookedTimes });
+  } catch (error) {
+    next(error);
   }
-);
+});
+
+router.post("/booking/:slug/appointment", async (req: Request, res: Response, next: NextFunction) => {
+  const slug = req.params.slug as string;
+  const result = bookingSchema.safeParse(req.body);
+  if (!result.success) return res.status(400).json({ error: result.error.flatten() });
+
+  const { clientName, clientPhone, date, barberId, serviceId } = result.data;
+
+  try {
+    const tenant = await prisma.tenant.findUnique({ where: { slug } });
+    if (!tenant) return res.status(404).json({ error: "Barbearia não encontrada" });
+
+    const service = await prisma.service.findUnique({ where: { id: serviceId } });
+    if (!service) return res.status(404).json({ error: "Serviço não encontrado" });
+
+    let client = await prisma.client.findFirst({ where: { phone: clientPhone, tenantId: tenant.id } });
+
+    if (!client) {
+      client = await prisma.client.create({
+        data: { name: clientName, phone: clientPhone, tenantId: tenant.id },
+      });
+    }
+
+    const appointment = await prisma.appointment.create({
+      data: {
+        date: new Date(date),
+        clientId: client.id,
+        barberId,
+        serviceId,
+        totalPrice: service.price,
+        tenantId: tenant.id,
+        status: "PENDING",
+      },
+    });
+
+    res.status(201).json(appointment);
+  } catch (error) {
+    next(error);
+  }
+});
 
 export default router;
