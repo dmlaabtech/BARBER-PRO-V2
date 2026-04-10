@@ -6,24 +6,24 @@ import rateLimit from "express-rate-limit";
 import type Stripe from "stripe";
 
 // --- IMPORTAÇÃO DOS MÓDULOS DE ROTAS ---
-import authRoutes from "./src/routes/auth.routes";
-import appointmentsRoutes from "./src/routes/appointments.routes";
-import clientsRoutes from "./src/routes/clients.routes";
-import barbersRoutes from "./src/routes/barbers.routes";
-import servicesRoutes from "./src/routes/services.routes";
-import productsRoutes from "./src/routes/products.routes";
-import salesRoutes from "./src/routes/sales.routes";
-import financialRoutes from "./src/routes/financial.routes";
-import notificationsRoutes from "./src/routes/notifications.routes";
-import superRoutes from "./src/routes/super.routes";
-import plansRoutes from "./src/routes/plans.routes";
-import publicRoutes from "./src/routes/public.routes";
-import dashboardRoutes from "./src/routes/dashboard.routes";
-import tenantRoutes from "./src/routes/tenant.routes";
-import stripeRoutes from "./src/routes/stripe.routes";
+import authRoutes from "./src/routes/auth.routes.js";
+import appointmentsRoutes from "./src/routes/appointments.routes.js";
+import clientsRoutes from "./src/routes/clients.routes.js";
+import barbersRoutes from "./src/routes/barbers.routes.js";
+import servicesRoutes from "./src/routes/services.routes.js";
+import productsRoutes from "./src/routes/products.routes.js";
+import salesRoutes from "./src/routes/sales.routes.js";
+import financialRoutes from "./src/routes/financial.routes.js";
+import notificationsRoutes from "./src/routes/notifications.routes.js";
+import superRoutes from "./src/routes/super.routes.js";
+import plansRoutes from "./src/routes/plans.routes.js";
+import publicRoutes from "./src/routes/public.routes.js";
+import dashboardRoutes from "./src/routes/dashboard.routes.js";
+import tenantRoutes from "./src/routes/tenant.routes.js";
+import stripeRoutes from "./src/routes/stripe.routes.js";
 
-import { getStripe } from "./src/lib/stripe";
-import { prisma } from "./src/lib/prisma";
+import { getStripe } from "./src/lib/stripe.js";
+import { prisma } from "./src/lib/prisma.js";
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;

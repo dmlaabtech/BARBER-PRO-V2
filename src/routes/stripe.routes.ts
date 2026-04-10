@@ -1,12 +1,15 @@
 import { Router, Response, NextFunction } from "express";
 import { AuthRequest } from "../../types/express";
-import { authenticateToken } from "../middleware/auth";
-import { tenantGuard, requireRole } from "../middleware/tenant";
-import { getStripe } from "../lib/stripe";
-import { prisma } from "../lib/prisma";
+import { authenticateToken } from "../middleware/auth.js";
+import { tenantGuard, requireRole } from "../middleware/tenant.js";
+import { getStripe } from "../lib/stripe.js";
+import { prisma } from "../lib/prisma.js";
 
 const router = Router();
 
+// -------------------------------------------------------------
+// CRIAR CHECKOUT SESSION
+// -------------------------------------------------------------
 router.post(
   "/create-checkout-session",
   authenticateToken,
@@ -21,10 +24,16 @@ router.post(
       });
 
       if (!tenant) {
-        return res.status(404).json({ error: "Barbearia não encontrada" });
+        return res.status(404).json({
+          error: "Barbearia não encontrada",
+        });
       }
 
-      const origin = req.headers.origin || process.env.APP_URL || "http://localhost:3000";
+      const origin =
+        req.headers.origin ||
+        process.env.APP_URL ||
+        "http://localhost:3000";
+
       const stripe = getStripe();
 
       const session = await stripe.checkout.sessions.create({
@@ -35,10 +44,13 @@ router.post(
               currency: "brl",
               product_data: {
                 name: "BarberPro V2 — Plano Premium",
-                description: "Acesso total à gestão de barbearia, estoque e financeiro.",
+                description:
+                  "Acesso total à gestão de barbearia, estoque e financeiro.",
               },
               unit_amount: 7990,
-              recurring: { interval: "month" },
+              recurring: {
+                interval: "month",
+              },
             },
             quantity: 1,
           },
@@ -50,7 +62,9 @@ router.post(
         customer_email: req.user.email,
       });
 
-      return res.json({ url: session.url });
+      return res.json({
+        url: session.url,
+      });
     } catch (error) {
       next(error);
     }
