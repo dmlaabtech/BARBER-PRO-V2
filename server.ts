@@ -1,12 +1,11 @@
 import "dotenv/config";
 import express, { Request, Response, NextFunction } from "express";
 import path from "path";
-import { createServer as createViteServer } from "vite";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import type Stripe from "stripe";
 
-// --- IMPORTAÇÃO COM EXTENSÃO .js (Obrigatório para ESM na Vercel) ---
+// --- IMPORTAÇÃO DOS MÓDULOS DE ROTAS (Com extensão .js para Vercel ESM) ---
 import authRoutes from "./src/routes/auth.routes.js";
 import appointmentsRoutes from "./src/routes/appointments.routes.js";
 import clientsRoutes from "./src/routes/clients.routes.js";
@@ -28,13 +27,11 @@ import { prisma } from "./src/lib/prisma.js";
 
 async function startServer() {
   const app = express();
-  
   const PORT = Number(process.env.PORT) || 3000;
 
-  // --- SEGURANÇA GLOBAL ---
   app.use(helmet({ contentSecurityPolicy: false }));
-  
-  // Webhook do Stripe
+
+  // Webhook do Stripe (Deve vir antes do express.json)
   app.post("/api/webhooks/stripe", express.raw({ type: 'application/json' }), async (req: Request, res: Response, next: NextFunction) => {
     const sig = req.headers['stripe-signature'];
     const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -72,6 +69,7 @@ async function startServer() {
   });
 
   app.use(express.json({ limit: '10kb' }));
+  
   const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 150,
@@ -96,14 +94,15 @@ async function startServer() {
   app.use("/api/tenant", tenantRoutes);
   app.use("/api/stripe", stripeRoutes);
 
-  // --- TRATAMENTO GLOBAL DE ERROS ---
+  // Erros Globais
   app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     console.error("Erro Global:", err.stack);
-    res.status(500).json({ error: "Ocorreu um erro interno." });
+    res.status(500).json({ error: "Ocorreu um erro interno no servidor." });
   });
 
-  // --- SERVIDOR FRONTEND ---
+  // Frontend (Vite no Dev, Estático na Produção)
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
     app.use(vite.middlewares);
   } else {
@@ -112,14 +111,23 @@ async function startServer() {
     app.get("*", (req, res) => res.sendFile(path.join(distPath, "index.html")));
   }
 
-  if (process.env.NODE_ENV !== "production") {
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(`🚀 Servidor local rodando na porta ${PORT}`);
-    });
-  }
-
   return app;
 }
 
-// Exportamos o app para a Vercel
-export default startServer();
+// Ponte para Serverless Vercel
+const appPromise = startServer();
+
+export default async function handler(req: any, res: any) {
+  const app = await appPromise;
+  app(req, res);
+}
+
+// Inicia servidor local em desenvolvimento
+if (process.env.NODE_ENV !== "production") {
+  startServer().then((app) => {
+    const PORT = process.env.PORT || 3000;
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`🚀 BarberPro rodando localmente em http://localhost:${PORT}`);
+    });
+  });
+}
