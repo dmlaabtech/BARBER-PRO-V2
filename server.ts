@@ -28,7 +28,9 @@ import { prisma } from "./src/lib/prisma";
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT || 3000;
+  
+  // CORREÇÃO: Convertendo explicitamente para Number para evitar o erro TS2769
+  const PORT = Number(process.env.PORT) || 3000;
 
   // --- SEGURANÇA GLOBAL ---
   app.use(helmet({ contentSecurityPolicy: false }));
