@@ -4,7 +4,7 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
-import Stripe from "stripe"; // Mantido apenas para tipagem no webhook
+import type Stripe from "stripe"; // Mantido apenas como TYPE para o webhook
 
 // --- IMPORTAÇÃO DOS NOSSOS NOVOS MÓDULOS DE ROTAS ---
 import authRoutes from "./src/routes/auth.routes";
@@ -20,6 +20,8 @@ import superRoutes from "./src/routes/super.routes";
 import plansRoutes from "./src/routes/plans.routes";
 import publicRoutes from "./src/routes/public.routes";
 import dashboardRoutes from "./src/routes/dashboard.routes";
+import tenantRoutes from "./src/routes/tenant.routes";
+import stripeRoutes from "./src/routes/stripe.routes";
 
 import { stripe } from "./src/lib/stripe";
 import { prisma } from "./src/lib/prisma";
@@ -91,6 +93,8 @@ async function startServer() {
   app.use("/api/plans", plansRoutes);
   app.use("/api/public", publicRoutes);
   app.use("/api/dashboard", dashboardRoutes);
+  app.use("/api/tenant", tenantRoutes);
+  app.use("/api/stripe", stripeRoutes);
 
   // --- TRATAMENTO GLOBAL DE ERROS ---
   app.use((err: any, req: Request, res: Response, next: NextFunction) => {
@@ -108,9 +112,15 @@ async function startServer() {
     app.get("*", (req, res) => res.sendFile(path.join(distPath, "index.html")));
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`🚀 Motor BarberPro a trabalhar lindamente na porta ${PORT}!`);
-  });
+  // Só inicia o .listen() se NÃO estiver rodando na Vercel (modo local)
+  if (process.env.NODE_ENV !== "production") {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`🚀 Motor BarberPro a trabalhar lindamente na porta ${PORT}!`);
+    });
+  }
+
+  return app; // Retornamos o app para a Vercel poder usá-lo
 }
 
-startServer();
+// Em vez de só chamar startServer(), nós a exportamos para a Vercel
+export default startServer();

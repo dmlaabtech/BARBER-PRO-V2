@@ -35,12 +35,31 @@ router.get("/stats", authenticateToken, tenantGuard, async (req: AuthRequest, re
       }))
       .sort((a, b) => b.revenue - a.revenue);
 
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+    sevenDaysAgo.setHours(0, 0, 0, 0);
+
+    const dailyTransactions = await prisma.financialTransaction.findMany({
+      where: {
+        tenantId,
+        type: "INCOME",
+        date: { gte: sevenDaysAgo },
+      },
+      select: { date: true, amount: true },
+    });
+
     const last7Days = Array.from({ length: 7 }).map((_, i) => {
       const d = new Date();
       d.setDate(d.getDate() - (6 - i));
+      const dateStr = d.toLocaleDateString("pt-BR");
+
+      const revenue = dailyTransactions
+        .filter((t) => new Date(t.date).toLocaleDateString("pt-BR") === dateStr)
+        .reduce((sum, t) => sum + Number(t.amount), 0);
+
       return {
         name: d.toLocaleDateString("pt-BR", { weekday: "short" }),
-        revenue: 0,
+        revenue,
       };
     });
 
