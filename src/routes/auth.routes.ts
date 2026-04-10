@@ -3,7 +3,7 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { randomBytes } from "crypto";
-import { prisma } from "../lib/prisma";
+import { prisma } from "../lib/prisma.js";
 
 const router = Router();
 
