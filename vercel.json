@@ -15,16 +15,15 @@
   ],
   "routes": [
     {
-      "src": "/api/webhooks/stripe",
-      "dest": "server.ts"
+      "src": "/api/(.*)",
+      "dest": "/server.ts"
     },
     {
-      "src": "/api/(.*)",
-      "dest": "server.ts"
+      "handle": "filesystem"
     },
     {
       "src": "/(.*)",
-      "dest": "/index.html"
+      "dest": "/dist/index.html"
     }
   ]
 }

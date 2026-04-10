@@ -1,9 +1,9 @@
 import { Router, Response, NextFunction } from "express";
 import { AuthRequest } from "../../types/express";
-import { authenticateToken } from "../middleware/auth.js";
-import { tenantGuard, requireRole } from "../middleware/tenant.js";
-import { stripe } from "../lib/stripe.js";
-import { prisma } from "../lib/prisma.js";
+import { authenticateToken } from "../middleware/auth";
+import { tenantGuard, requireRole } from "../middleware/tenant";
+import { stripe } from "../lib/stripe";
+import { prisma } from "../lib/prisma";
 
 const router = Router();
 
