@@ -2,13 +2,19 @@ import { Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { AuthRequest } from "../../types/express";
 
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
-  console.error("FATAL ERROR: JWT_SECRET não está definido nas variáveis de ambiente.");
-  process.exit(1);
-}
+const JWT_SECRET = process.env.JWT_SECRET || "";
 
-export const authenticateToken = (req: AuthRequest, res: Response, next: NextFunction) => {
+export const authenticateToken = (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  if (!JWT_SECRET) {
+    return res.status(500).json({
+      error: "JWT_SECRET não configurado no servidor.",
+    });
+  }
+
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
 

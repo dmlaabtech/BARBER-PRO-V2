@@ -5,7 +5,7 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import type Stripe from "stripe";
 
-// --- IMPORTAÇÃO DOS MÓDULOS DE ROTAS (Sem extensão .js para o @vercel/node) ---
+// --- IMPORTAÇÃO DOS MÓDULOS DE ROTAS ---
 import authRoutes from "./src/routes/auth.routes";
 import appointmentsRoutes from "./src/routes/appointments.routes";
 import clientsRoutes from "./src/routes/clients.routes";
@@ -22,6 +22,7 @@ import dashboardRoutes from "./src/routes/dashboard.routes";
 import tenantRoutes from "./src/routes/tenant.routes";
 import stripeRoutes from "./src/routes/stripe.routes";
 
+import { getStripe } from "./src/lib/stripe";
 import { prisma } from "./src/lib/prisma";
 
 const app = express();
@@ -30,52 +31,63 @@ const PORT = Number(process.env.PORT) || 3000;
 // --- SEGURANÇA GLOBAL ---
 app.use(helmet({ contentSecurityPolicy: false }));
 
-// --- WEBHOOK DO STRIPE --- 
-// (Deve vir estritamente antes do express.json para não alterar o raw body)
-app.post("/api/webhooks/stripe", express.raw({ type: 'application/json' }), async (req: Request, res: Response, next: NextFunction) => {
-  const sig = req.headers['stripe-signature'];
-  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
-  let event;
+// --- WEBHOOK DO STRIPE ---
+app.post(
+  "/api/webhooks/stripe",
+  express.raw({ type: "application/json" }),
+  async (req: Request, res: Response, next: NextFunction) => {
+    const sig = req.headers["stripe-signature"];
+    const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    let event: Stripe.Event;
 
-  try {
-    if (endpointSecret && sig) {
-      event = stripe.webhooks.constructEvent(req.body, sig as string, endpointSecret);
-    } else {
-      event = JSON.parse(req.body.toString());
-    }
-  } catch (err: any) {
-    console.error(`Webhook Error: ${err.message}`);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
-
-  try {
-    if (event.type === 'checkout.session.completed') {
-      const session = event.data.object as Stripe.Checkout.Session;
-      if (session.client_reference_id && session.subscription) {
-        await prisma.tenant.update({
-          where: { id: session.client_reference_id },
-          data: {
-            stripeCustomerId: session.customer as string,
-            stripeSubscriptionId: session.subscription as string,
-            planStatus: 'ACTIVE'
-          }
-        });
+    try {
+      if (endpointSecret && sig) {
+        const stripe = getStripe();
+        event = stripe.webhooks.constructEvent(
+          req.body,
+          sig as string,
+          endpointSecret
+        );
+      } else {
+        event = JSON.parse(req.body.toString());
       }
+    } catch (err: any) {
+      console.error(`Webhook Error: ${err.message}`);
+      return res.status(400).send(`Webhook Error: ${err.message}`);
     }
-    res.send();
-  } catch (error) {
-    next(error);
+
+    try {
+      if (event.type === "checkout.session.completed") {
+        const session = event.data.object as Stripe.Checkout.Session;
+
+        if (session.client_reference_id && session.subscription) {
+          await prisma.tenant.update({
+            where: { id: session.client_reference_id },
+            data: {
+              stripeCustomerId: session.customer as string,
+              stripeSubscriptionId: session.subscription as string,
+              planStatus: "ACTIVE",
+            },
+          });
+        }
+      }
+
+      res.send();
+    } catch (error) {
+      next(error);
+    }
   }
-});
+);
 
 // --- MIDDLEWARES GERAIS ---
-app.use(express.json({ limit: '10kb' }));
+app.use(express.json({ limit: "10kb" }));
 
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
+  windowMs: 15 * 60 * 1000,
   max: 150,
-  message: { error: "Muitas requisições. Tente novamente mais tarde." }
+  message: { error: "Muitas requisições. Tente novamente mais tarde." },
 });
+
 app.use("/api/", apiLimiter);
 
 // --- REGISTRO DAS ROTAS ---
@@ -97,30 +109,34 @@ app.use("/api/stripe", stripeRoutes);
 
 // --- TRATAMENTO GLOBAL DE ERROS ---
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
-  console.error("Erro Global:", err.stack);
-  res.status(500).json({ error: "Ocorreu um erro interno no servidor." });
+  console.error("Erro Global:", err);
+  res.status(500).json({
+    error: err?.message || "Ocorreu um erro interno no servidor.",
+  });
 });
 
 // --- AMBIENTE E EXPORTAÇÃO ---
-
 if (process.env.NODE_ENV !== "production") {
-  // MODO DESENVOLVIMENTO (Local) - Inicia o motor do Vite dinamicamente
-  import("vite").then(async ({ createServer: createViteServer }) => {
-    const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
-    app.use(vite.middlewares);
-    
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(`🚀 BarberPro rodando localmente em http://localhost:${PORT}`);
+  import("vite")
+    .then(async ({ createServer: createViteServer }) => {
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
+
+      app.use(vite.middlewares);
+
+      app.listen(PORT, "0.0.0.0", () => {
+        console.log(`🚀 BarberPro rodando localmente em http://localhost:${PORT}`);
+      });
+    })
+    .catch((err) => {
+      console.error("Erro fatal ao tentar iniciar o Vite localmente:", err);
     });
-  }).catch((err) => {
-    console.error("Erro fatal ao tentar iniciar o Vite localmente:", err);
-  });
 } else {
-  // MODO PRODUÇÃO (Vercel) - Apenas serve a pasta dist compilada
   const distPath = path.join(process.cwd(), "dist");
   app.use(express.static(distPath));
   app.get("*", (req, res) => res.sendFile(path.join(distPath, "index.html")));
 }
 
-// ✨ EXPORTAÇÃO SERVERLESS DIRETA PARA A VERCEL ✨
 export default app;

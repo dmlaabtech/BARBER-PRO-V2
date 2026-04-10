@@ -3,16 +3,12 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { randomBytes } from "crypto";
-import { prisma } from "../lib/prisma.js";
+import { prisma } from "../lib/prisma";
 
 const router = Router();
 
-const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_SECRET = process.env.JWT_SECRET || "";
 const APP_URL = process.env.APP_URL || "http://localhost:3000";
-
-if (!JWT_SECRET) {
-    throw new Error("FATAL ERROR: JWT_SECRET não está definido.");
-}
 
 // -------------------------------------------------------------
 // VALIDAÇÕES
@@ -43,13 +39,20 @@ const resetPasswordSchema = z.object({
 // ROTAS
 // -------------------------------------------------------------
 
-// POST /api/auth/login
 router.post("/login", async (req: Request, res: Response, next: NextFunction) => {
   const result = loginSchema.safeParse(req.body);
-  if (!result.success) return res.status(400).json({ error: result.error.flatten() });
+  if (!result.success) {
+    return res.status(400).json({ error: result.error.flatten() });
+  }
+
+  if (!JWT_SECRET) {
+    return res.status(500).json({
+      error: "JWT_SECRET não configurado no servidor.",
+    });
+  }
 
   const { email, password } = result.data;
-  
+
   try {
     const user = await prisma.user.findUnique({
       where: { email },
@@ -61,12 +64,17 @@ router.post("/login", async (req: Request, res: Response, next: NextFunction) =>
     }
 
     const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role, tenantId: user.tenantId },
+      {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        tenantId: user.tenantId,
+      },
       JWT_SECRET,
       { expiresIn: "7d" }
     );
 
-    res.json({
+    return res.json({
       token,
       user: {
         id: user.id,
@@ -81,37 +89,52 @@ router.post("/login", async (req: Request, res: Response, next: NextFunction) =>
   }
 });
 
-// POST /api/auth/register
 router.post("/register", async (req: Request, res: Response, next: NextFunction) => {
   const result = registerSchema.safeParse(req.body);
-  if (!result.success) return res.status(400).json({ error: result.error.flatten() });
+  if (!result.success) {
+    return res.status(400).json({ error: result.error.flatten() });
+  }
 
   const { name, email, password, shopName, sessionId } = result.data;
 
   try {
     const pending = await prisma.pendingRegistration.findUnique({
-      where: { stripeSessionId: sessionId }
+      where: { stripeSessionId: sessionId },
     });
 
     if (!pending || pending.used) {
-      return res.status(400).json({ error: "Sessão de pagamento inválida ou já utilizada" });
+      return res.status(400).json({
+        error: "Sessão de pagamento inválida ou já utilizada",
+      });
     }
 
-    const existingUser = await prisma.user.findUnique({ where: { email } });
-    if (existingUser) return res.status(400).json({ error: "E-mail já cadastrado" });
+    const existingUser = await prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (existingUser) {
+      return res.status(400).json({ error: "E-mail já cadastrado" });
+    }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const slug = shopName.toLowerCase().replace(/ /g, "-").replace(/[^\w-]+/g, "");
+    const baseSlug = shopName
+      .toLowerCase()
+      .replace(/ /g, "-")
+      .replace(/[^\w-]+/g, "");
 
     await prisma.$transaction(async (tx) => {
-      // Após gerar o slug base:
-      let finalSlug = slug;
+      let finalSlug = baseSlug;
       let attempt = 0;
+
       while (true) {
-        const existing = await tx.tenant.findUnique({ where: { slug: finalSlug } });
+        const existing = await tx.tenant.findUnique({
+          where: { slug: finalSlug },
+        });
+
         if (!existing) break;
+
         attempt++;
-        finalSlug = `${slug}-${attempt}`;
+        finalSlug = `${baseSlug}-${attempt}`;
       }
 
       const tenant = await tx.tenant.create({
@@ -120,7 +143,7 @@ router.post("/register", async (req: Request, res: Response, next: NextFunction)
           slug: finalSlug,
           planId: pending.planId,
           planStatus: "ACTIVE",
-        }
+        },
       });
 
       await tx.user.create({
@@ -130,32 +153,36 @@ router.post("/register", async (req: Request, res: Response, next: NextFunction)
           password: hashedPassword,
           role: "OWNER",
           tenantId: tenant.id,
-        }
+        },
       });
 
       await tx.pendingRegistration.update({
         where: { id: pending.id },
-        data: { used: true }
+        data: { used: true },
       });
     });
 
-    res.json({ message: "Cadastro realizado com sucesso" });
+    return res.json({ message: "Cadastro realizado com sucesso" });
   } catch (error) {
     next(error);
   }
 });
 
-// POST /api/auth/forgot-password
 router.post("/forgot-password", async (req: Request, res: Response, next: NextFunction) => {
   const result = forgotPasswordSchema.safeParse(req.body);
-  if (!result.success) return res.status(400).json({ error: result.error.flatten() });
+  if (!result.success) {
+    return res.status(400).json({ error: result.error.flatten() });
+  }
 
   const { email } = result.data;
 
   try {
     const user = await prisma.user.findUnique({ where: { email } });
+
     if (!user) {
-      return res.json({ message: "Se o e-mail existir, um link de recuperação foi enviado." });
+      return res.json({
+        message: "Se o e-mail existir, um link de recuperação foi enviado.",
+      });
     }
 
     const token = randomBytes(32).toString("hex");
@@ -165,32 +192,37 @@ router.post("/forgot-password", async (req: Request, res: Response, next: NextFu
       data: {
         email,
         token,
-        expiresAt
-      }
+        expiresAt,
+      },
     });
 
     if (process.env.NODE_ENV !== "production") {
-      console.log(`[DEV MODE] E-mail simulado enviado para: ${email}. Verifique o banco de dados para o token de reset.`);
+      console.log(
+        `[DEV MODE] E-mail simulado enviado para: ${email}. Verifique o banco de dados para o token de reset.`
+      );
     } else {
       console.log(`[INFO] Solicitação de recuperação de senha gerada para: ${email}`);
     }
 
-    res.json({ message: "Se o e-mail existir, um link de recuperação foi enviado." });
+    return res.json({
+      message: "Se o e-mail existir, um link de recuperação foi enviado.",
+    });
   } catch (error) {
     next(error);
   }
 });
 
-// POST /api/auth/reset-password
 router.post("/reset-password", async (req: Request, res: Response, next: NextFunction) => {
   const result = resetPasswordSchema.safeParse(req.body);
-  if (!result.success) return res.status(400).json({ error: result.error.flatten() });
+  if (!result.success) {
+    return res.status(400).json({ error: result.error.flatten() });
+  }
 
   const { token, newPassword } = result.data;
 
   try {
     const resetToken = await prisma.passwordResetToken.findUnique({
-      where: { token }
+      where: { token },
     });
 
     if (!resetToken || resetToken.expiresAt < new Date()) {
@@ -201,14 +233,14 @@ router.post("/reset-password", async (req: Request, res: Response, next: NextFun
 
     await prisma.user.update({
       where: { email: resetToken.email },
-      data: { password: hashedPassword }
+      data: { password: hashedPassword },
     });
 
     await prisma.passwordResetToken.delete({
-      where: { id: resetToken.id }
+      where: { id: resetToken.id },
     });
 
-    res.json({ message: "Senha alterada com sucesso." });
+    return res.json({ message: "Senha alterada com sucesso." });
   } catch (error) {
     next(error);
   }
