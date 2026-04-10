@@ -22,7 +22,6 @@ import dashboardRoutes from "./src/routes/dashboard.routes";
 import tenantRoutes from "./src/routes/tenant.routes";
 import stripeRoutes from "./src/routes/stripe.routes";
 
-import { stripe } from "./src/lib/stripe";
 import { prisma } from "./src/lib/prisma";
 
 const app = express();
