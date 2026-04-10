@@ -6,44 +6,74 @@ import { prisma } from "../lib/prisma.js";
 
 const router = Router();
 
-const readNotificationSchema = z.object({
-  id: z.string().uuid(),
+// -------------------------------------------------------------
+// VALIDAÇÕES
+// -------------------------------------------------------------
+const markReadSchema = z.object({
+  notificationId: z.string().min(1),
 });
 
-// GET /api/notifications
-router.get("/", authenticateToken, async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const notifications = await prisma.notification.findMany({
-      where: {
-        OR: [
-          { tenantId: req.user.tenantId },
-          { userId: req.user.id }
-        ]
-      },
-      orderBy: { createdAt: "desc" },
-      take: 20
-    });
-    res.json(notifications);
-  } catch (error) {
-    next(error);
+// -------------------------------------------------------------
+// ROTAS DE NOTIFICAÇÕES
+// -------------------------------------------------------------
+
+// GET /api/notifications - Listar notificações do tenant
+router.get(
+  "/",
+  authenticateToken,
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    const tenantId = req.user?.tenantId as string;
+
+    try {
+      const notifications = await prisma.notification.findMany({
+        where: { tenantId },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+      });
+
+      res.json(notifications);
+    } catch (error) {
+      next(error);
+    }
   }
-});
+);
 
-// POST /api/notifications/read
-router.post("/read", authenticateToken, async (req: AuthRequest, res: Response, next: NextFunction) => {
-  const result = readNotificationSchema.safeParse(req.body);
-  if (!result.success) return res.status(400).json({ error: result.error.flatten() });
+// PATCH /api/notifications/read - Marcar como lida
+router.patch(
+  "/read",
+  authenticateToken,
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    const result = markReadSchema.safeParse(req.body);
 
-  const { id } = result.data;
-  try {
-    await prisma.notification.update({
-      where: { id },
-      data: { read: true }
-    });
-    res.json({ success: true });
-  } catch (error) {
-    next(error);
+    if (!result.success) {
+      return res.status(400).json({ error: result.error.flatten() });
+    }
+
+    const { notificationId } = result.data;
+    const tenantId = req.user?.tenantId as string;
+
+    try {
+      const notification = await prisma.notification.findFirst({
+        where: {
+          id: notificationId,
+          tenantId,
+        },
+      });
+
+      if (!notification) {
+        return res.status(404).json({ error: "Notificação não encontrada" });
+      }
+
+      const updated = await prisma.notification.update({
+        where: { id: notificationId },
+        data: { read: true },
+      });
+
+      res.json(updated);
+    } catch (error) {
+      next(error);
+    }
   }
-});
+);
 
 export default router;
