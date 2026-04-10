@@ -4,38 +4,37 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
-import type Stripe from "stripe"; // Mantido apenas como TYPE para o webhook
+import type Stripe from "stripe";
 
-// --- IMPORTAÇÃO DOS NOSSOS NOVOS MÓDULOS DE ROTAS ---
-import authRoutes from "./src/routes/auth.routes";
-import appointmentsRoutes from "./src/routes/appointments.routes";
-import clientsRoutes from "./src/routes/clients.routes";
-import barbersRoutes from "./src/routes/barbers.routes";
-import servicesRoutes from "./src/routes/services.routes";
-import productsRoutes from "./src/routes/products.routes";
-import salesRoutes from "./src/routes/sales.routes";
-import financialRoutes from "./src/routes/financial.routes";
-import notificationsRoutes from "./src/routes/notifications.routes";
-import superRoutes from "./src/routes/super.routes";
-import plansRoutes from "./src/routes/plans.routes";
-import publicRoutes from "./src/routes/public.routes";
-import dashboardRoutes from "./src/routes/dashboard.routes";
-import tenantRoutes from "./src/routes/tenant.routes";
-import stripeRoutes from "./src/routes/stripe.routes";
+// --- IMPORTAÇÃO COM EXTENSÃO .js (Obrigatório para ESM na Vercel) ---
+import authRoutes from "./src/routes/auth.routes.js";
+import appointmentsRoutes from "./src/routes/appointments.routes.js";
+import clientsRoutes from "./src/routes/clients.routes.js";
+import barbersRoutes from "./src/routes/barbers.routes.js";
+import servicesRoutes from "./src/routes/services.routes.js";
+import productsRoutes from "./src/routes/products.routes.js";
+import salesRoutes from "./src/routes/sales.routes.js";
+import financialRoutes from "./src/routes/financial.routes.js";
+import notificationsRoutes from "./src/routes/notifications.routes.js";
+import superRoutes from "./src/routes/super.routes.js";
+import plansRoutes from "./src/routes/plans.routes.js";
+import publicRoutes from "./src/routes/public.routes.js";
+import dashboardRoutes from "./src/routes/dashboard.routes.js";
+import tenantRoutes from "./src/routes/tenant.routes.js";
+import stripeRoutes from "./src/routes/stripe.routes.js";
 
-import { stripe } from "./src/lib/stripe";
-import { prisma } from "./src/lib/prisma";
+import { stripe } from "./src/lib/stripe.js";
+import { prisma } from "./src/lib/prisma.js";
 
 async function startServer() {
   const app = express();
   
-  // CORREÇÃO: Convertendo explicitamente para Number para evitar o erro TS2769
   const PORT = Number(process.env.PORT) || 3000;
 
   // --- SEGURANÇA GLOBAL ---
   app.use(helmet({ contentSecurityPolicy: false }));
   
-  // O Webhook do Stripe precisa do 'raw' body, então pomos isto ANTES do express.json()
+  // Webhook do Stripe
   app.post("/api/webhooks/stripe", express.raw({ type: 'application/json' }), async (req: Request, res: Response, next: NextFunction) => {
     const sig = req.headers['stripe-signature'];
     const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -72,7 +71,6 @@ async function startServer() {
     }
   });
 
-  // Limite de payload e de acessos
   app.use(express.json({ limit: '10kb' }));
   const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -81,7 +79,7 @@ async function startServer() {
   });
   app.use("/api/", apiLimiter);
 
-  // --- REGISTO DOS MÓDULOS DE ROTAS ---
+  // --- REGISTRO DAS ROTAS ---
   app.use("/api/auth", authRoutes);
   app.use("/api/appointments", appointmentsRoutes);
   app.use("/api/clients", clientsRoutes);
@@ -101,10 +99,10 @@ async function startServer() {
   // --- TRATAMENTO GLOBAL DE ERROS ---
   app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     console.error("Erro Global:", err.stack);
-    res.status(500).json({ error: "Ocorreu um erro interno. Nossa equipa foi notificada." });
+    res.status(500).json({ error: "Ocorreu um erro interno." });
   });
 
-  // --- SERVIDOR FRONTEND (Vite / Produção) ---
+  // --- SERVIDOR FRONTEND ---
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
     app.use(vite.middlewares);
@@ -114,15 +112,14 @@ async function startServer() {
     app.get("*", (req, res) => res.sendFile(path.join(distPath, "index.html")));
   }
 
-  // Só inicia o .listen() se NÃO estiver rodando na Vercel (modo local)
   if (process.env.NODE_ENV !== "production") {
     app.listen(PORT, "0.0.0.0", () => {
-      console.log(`🚀 Motor BarberPro a trabalhar lindamente na porta ${PORT}!`);
+      console.log(`🚀 Servidor local rodando na porta ${PORT}`);
     });
   }
 
-  return app; // Retornamos o app para a Vercel poder usá-lo
+  return app;
 }
 
-// Em vez de só chamar startServer(), nós a exportamos para a Vercel
+// Exportamos o app para a Vercel
 export default startServer();
