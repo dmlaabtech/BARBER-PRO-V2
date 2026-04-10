@@ -17,7 +17,7 @@ model Tenant {
   phone         String?
   logoUrl       String?
   backgroundUrl String?
-  primaryColor  String? @default("#ffffff")
+  primaryColor  String?   @default("#ffffff")
   planStatus    PlanStatus @default(TRIAL)
   planId        String
   plan          Plan      @relation(fields: [planId], references: [id])
@@ -74,7 +74,7 @@ model User {
   name      String
   email     String   @unique
   password  String
-  role      Role     @default(BARBER)
+  role      Role      @default(BARBER)
   tenantId  String
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
   notifications Notification[]
@@ -198,6 +198,9 @@ model Appointment {
   status            AppointmentStatus @default(PENDING)
   notes             String?
   
+  // ✨ CAMPO NOVO: Para o bot do WhatsApp saber quem já foi avisado ✨
+  reminderSent      Boolean           @default(false)
+  
   tenantId          String
   tenant            Tenant            @relation(fields: [tenantId], references: [id])
   
@@ -236,6 +239,7 @@ model Category {
   type      CategoryType
   
   tenantId  String
+  
   tenant    Tenant    @relation(fields: [tenantId], references: [id])
   
   products  Product[]
