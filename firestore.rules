@@ -1,0 +1,84 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    // Collection: tenants
+    // Fields: name, slug, planId, planStatus, logoUrl, backgroundUrl, primaryColor, createdAt
+    //
+    // Collection: users
+    // Fields: name, email, role, tenantId, phone, loyaltyPoints, createdAt
+    //
+    // Collection: services
+    // Fields: name, price, duration, category, tenantId
+    //
+    // Collection: appointments
+    // Fields: tenantId, clientId, barberId, serviceId, date, status, totalPrice
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      // CORREÇÃO CRÍTICA (4): Validação hardcoded de e-mail removida
+      return isAuthenticated() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'SUPER_ADMIN';
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isTenantOwner(tenantId) {
+      return isAuthenticated() && getUserData().tenantId == tenantId && getUserData().role == 'OWNER';
+    }
+
+    function isTenantStaff(tenantId) {
+      return isAuthenticated() && getUserData().tenantId == tenantId && (getUserData().role == 'OWNER' || getUserData().role == 'BARBER');
+    }
+
+    // Validation Helpers
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    // Rules
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated() && request.resource.data.role != 'SUPER_ADMIN';
+      allow update: if (isOwner(userId) && request.resource.data.role == resource.data.role) || isAdmin();
+    }
+
+    match /tenants/{tenantId} {
+      allow read: if true; // Public for booking
+      allow write: if isAdmin() || isTenantOwner(tenantId);
+    }
+
+    match /services/{serviceId} {
+      allow read: if true; // Public for booking
+      allow write: if isTenantOwner(request.resource.data.tenantId) || isAdmin();
+    }
+
+    match /appointments/{appointmentId} {
+      allow read: if isAuthenticated() && (
+        isOwner(resource.data.clientId) || 
+        isTenantStaff(resource.data.tenantId) || 
+        isAdmin()
+      );
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (
+        isOwner(resource.data.clientId) || 
+        isTenantStaff(resource.data.tenantId) || 
+        isAdmin()
+      );
+    }
+  }
+}

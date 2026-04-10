@@ -1,0 +1,328 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- NÚCLEO SAAS ---
+
+model Tenant {
+  id            String    @id @default(uuid())
+  slug          String    @unique
+  name          String
+  phone         String?
+  logoUrl       String?
+  backgroundUrl String?
+  primaryColor  String? @default("#ffffff")
+  planStatus    PlanStatus @default(TRIAL)
+  planId        String
+  plan          Plan      @relation(fields: [planId], references: [id])
+  
+  stripeCustomerId     String?   @unique
+  stripeSubscriptionId String?   @unique
+  
+  users         User[]
+  barbers       Barber[]
+  clients       Client[]
+  services      Service[]
+  appointments  Appointment[]
+  products      Product[]
+  categories    Category[]
+  sales         Sale[]
+  transactions  FinancialTransaction[]
+  notifications Notification[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model PendingRegistration {
+  id            String   @id @default(uuid())
+  stripeSessionId String @unique
+  email         String
+  planId        String
+  used          Boolean  @default(false)
+  createdAt     DateTime @default(now())
+}
+
+model Plan {
+  id              String   @id @default(uuid())
+  name            String   // Basic, Pro, Premium
+  maxBarbers      Int
+  maxAppointments Int
+  price           Decimal  @db.Decimal(10, 2)
+  features        String   // JSON stringified array
+  tenants         Tenant[]
+}
+
+enum PlanStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+// --- USUÁRIOS E PERMISSÕES ---
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role     @default(BARBER)
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  notifications Notification[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([tenantId])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  email     String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+enum Role {
+  SUPER_ADMIN
+  OWNER
+  MANAGER
+  BARBER
+  RECEPTIONIST
+  CLIENT
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  title     String
+  message   String
+  type      String   @default("info") // info, success, warning, error
+  read      Boolean  @default(false)
+  tenantId  String?
+  userId    String?
+  createdAt DateTime @default(now())
+
+  tenant    Tenant?  @relation(fields: [tenantId], references: [id])
+  user      User?    @relation(fields: [userId], references: [id])
+  
+  @@index([tenantId])
+  @@index([userId])
+}
+
+// --- OPERACIONAL ---
+
+model Barber {
+  id           String        @id @default(uuid())
+  name         String
+  photoUrl     String?
+  bio          String?
+  commission   Decimal       @default(0.0) @db.Decimal(10, 2)
+  active       Boolean       @default(true)
+  
+  tenantId     String
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  
+  services     BarberService[]
+  appointments Appointment[]
+  
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  
+  @@index([tenantId])
+}
+
+model Service {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  price       Decimal  @db.Decimal(10, 2)
+  duration    Int      // em minutos
+  active      Boolean  @default(true)
+  
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  
+  barbers     BarberService[]
+  appointments Appointment[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([tenantId])
+}
+
+model BarberService {
+  barberId  String
+  serviceId String
+  barber    Barber  @relation(fields: [barberId], references: [id])
+  service   Service @relation(fields: [serviceId], references: [id])
+  
+  @@id([barberId, serviceId])
+}
+
+model Client {
+  id        String   @id @default(uuid())
+  name      String
+  phone     String
+  email     String?
+  cpf       String?
+  birthDate DateTime?
+  loyaltyPoints Int @default(0)
+  
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  
+  appointments Appointment[]
+  sales        Sale[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([tenantId])
+  @@index([phone])
+}
+
+model Appointment {
+  id            String            @id @default(uuid())
+  date          DateTime
+  status        AppointmentStatus @default(PENDING)
+  notes         String?
+  
+  tenantId      String
+  tenant        Tenant            @relation(fields: [tenantId], references: [id])
+  
+  clientId      String
+  client        Client            @relation(fields: [clientId], references: [id])
+  
+  barberId      String
+  barber        Barber            @relation(fields: [barberId], references: [id])
+  
+  serviceId     String
+  service       Service           @relation(fields: [serviceId], references: [id])
+  
+  totalPrice    Decimal           @db.Decimal(10, 2)
+  
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  
+  @@index([tenantId])
+  @@index([barberId, date])
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  IN_SERVICE
+  COMPLETED
+  CANCELED
+  NO_SHOW
+}
+
+// --- ESTOQUE E VENDAS ---
+
+model Category {
+  id        String    @id @default(uuid())
+  name      String
+  type      CategoryType
+  
+  tenantId  String
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
+  
+  products  Product[]
+  
+  @@index([tenantId])
+}
+
+enum CategoryType {
+  PRODUCT
+  SERVICE
+}
+
+model Product {
+  id          String   @id @default(uuid())
+  name        String
+  sku         String?
+  price       Decimal  @db.Decimal(10, 2)
+  cost        Decimal  @db.Decimal(10, 2)
+  stock       Int      @default(0)
+  minStock    Int      @default(0)
+  
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  
+  categoryId  String
+  category    Category @relation(fields: [categoryId], references: [id])
+  
+  saleItems   SaleItem[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([tenantId])
+}
+
+model Sale {
+  id          String   @id @default(uuid())
+  total       Decimal  @db.Decimal(10, 2)
+  discount    Decimal  @default(0.0) @db.Decimal(10, 2)
+  paymentType PaymentType
+  
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  
+  clientId    String?
+  client      Client?  @relation(fields: [clientId], references: [id])
+  
+  items       SaleItem[]
+  
+  createdAt   DateTime @default(now())
+  
+  @@index([tenantId])
+}
+
+enum PaymentType {
+  CASH
+  PIX
+  CREDIT
+  DEBIT
+}
+
+model SaleItem {
+  id        String   @id @default(uuid())
+  saleId    String
+  sale      Sale     @relation(fields: [saleId], references: [id])
+  
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  
+  quantity  Int
+  price     Decimal  @db.Decimal(10, 2)
+}
+
+// --- FINANCEIRO ---
+
+model FinancialTransaction {
+  id          String   @id @default(uuid())
+  description String
+  amount      Decimal  @db.Decimal(10, 2)
+  type        TransactionType
+  date        DateTime @default(now())
+  
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  
+  @@index([tenantId])
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
