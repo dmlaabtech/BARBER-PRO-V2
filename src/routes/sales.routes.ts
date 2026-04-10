@@ -29,6 +29,7 @@ const createSaleSchema = z.object({
 // ROTAS DE VENDAS
 // -------------------------------------------------------------
 
+// GET /api/sales
 router.get(
   "/",
   authenticateToken,
@@ -50,6 +51,7 @@ router.get(
   }
 );
 
+// POST /api/sales - Processar Venda
 router.post(
   "/",
   authenticateToken,
@@ -127,6 +129,7 @@ router.post(
   }
 );
 
+// DELETE /api/sales/:id
 router.delete(
   "/:id",
   authenticateToken,

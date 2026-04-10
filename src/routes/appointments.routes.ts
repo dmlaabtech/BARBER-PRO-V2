@@ -1,5 +1,4 @@
 import { Router, Response, NextFunction } from "express";
-import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { AuthRequest } from "../../types/express";
 import { authenticateToken } from "../middleware/auth.js";
@@ -7,14 +6,6 @@ import { tenantGuard } from "../middleware/tenant.js";
 import { prisma } from "../lib/prisma.js";
 
 const router = Router();
-
-type AppointmentWithRelations = Prisma.AppointmentGetPayload<{
-  include: {
-    client: true;
-    barber: true;
-    service: true;
-  };
-}>;
 
 // -------------------------------------------------------------
 // VALIDAÇÕES
@@ -43,6 +34,7 @@ const updateAppointmentSchema = z.object({
 // ROTAS DE AGENDAMENTOS
 // -------------------------------------------------------------
 
+// GET /api/appointments - Listar todos os agendamentos do Tenant
 router.get(
   "/",
   authenticateToken,
@@ -68,6 +60,7 @@ router.get(
   }
 );
 
+// POST /api/appointments - Criar novo agendamento
 router.post(
   "/",
   authenticateToken,
@@ -117,6 +110,7 @@ router.post(
   }
 );
 
+// PATCH /api/appointments/:id - Atualizar status com Zod
 router.patch(
   "/:id",
   authenticateToken,
@@ -133,14 +127,13 @@ router.patch(
     const { status } = result.data;
 
     try {
-      const appointment = (await prisma.appointment.findFirst({
+      const appointment = await prisma.appointment.findFirst({
         where: { id, tenantId },
         include: {
           client: true,
-          barber: true,
           service: true,
         },
-      })) as AppointmentWithRelations | null;
+      });
 
       if (!appointment) {
         return res.status(404).json({ error: "Agendamento não encontrado" });
@@ -149,11 +142,6 @@ router.patch(
       const updated = await prisma.appointment.update({
         where: { id },
         data: { status },
-        include: {
-          client: true,
-          barber: true,
-          service: true,
-        },
       });
 
       if (status === "COMPLETED" && appointment.status !== "COMPLETED") {
@@ -168,9 +156,7 @@ router.patch(
 
         await prisma.client.update({
           where: { id: appointment.clientId },
-          data: {
-            loyaltyPoints: { increment: 1 },
-          },
+          data: { loyaltyPoints: { increment: 1 } },
         });
       }
 
@@ -181,6 +167,7 @@ router.patch(
   }
 );
 
+// DELETE /api/appointments/:id - Cancelar/Excluir agendamento
 router.delete(
   "/:id",
   authenticateToken,

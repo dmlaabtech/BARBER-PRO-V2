@@ -16,7 +16,7 @@ const createProductSchema = z.object({
   cost: z.number().min(0),
   stock: z.number().min(0),
   minStock: z.number().min(0),
-  categoryId: z.string().min(1),
+  categoryId: z.string().optional().nullable(),
   sku: z.string().optional().nullable(),
 });
 
@@ -24,6 +24,7 @@ const createProductSchema = z.object({
 // ROTAS DE PRODUTOS
 // -------------------------------------------------------------
 
+// GET /api/products
 router.get(
   "/",
   authenticateToken,
@@ -45,6 +46,7 @@ router.get(
   }
 );
 
+// POST /api/products
 router.post(
   "/",
   authenticateToken,
@@ -69,7 +71,7 @@ router.post(
           stock,
           minStock,
           categoryId,
-          sku: sku ?? undefined,
+          sku,
           tenantId,
         },
         include: { category: true },
@@ -82,6 +84,7 @@ router.post(
   }
 );
 
+// DELETE /api/products/:id
 router.delete(
   "/:id",
   authenticateToken,

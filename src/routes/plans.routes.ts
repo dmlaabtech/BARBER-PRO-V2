@@ -13,11 +13,6 @@ const checkoutSchema = z.object({
   returnUrl: z.string().url().optional(),
 });
 
-function asString(value: string | string[] | undefined): string {
-  if (Array.isArray(value)) return value[0] ?? "";
-  return value ?? "";
-}
-
 // -------------------------------------------------------------
 // LISTAR PLANOS
 // -------------------------------------------------------------
@@ -109,9 +104,7 @@ router.post(
 router.get(
   "/verify-session/:sessionId",
   async (req: Request, res: Response, next: NextFunction) => {
-    const sessionId = asString(
-      req.params.sessionId as string | string[] | undefined
-    );
+    const sessionId = req.params.sessionId as string;
 
     try {
       const pending = await prisma.pendingRegistration.findUnique({

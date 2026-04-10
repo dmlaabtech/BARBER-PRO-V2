@@ -12,15 +12,11 @@ const bookingSchema = z.object({
   serviceId: z.string().uuid(),
 });
 
-function asString(value: string | string[] | undefined): string {
-  if (Array.isArray(value)) return value[0] ?? "";
-  return value ?? "";
-}
-
+// GET /api/public/booking/:slug — dados públicos da barbearia
 router.get(
   "/booking/:slug",
   async (req: Request, res: Response, next: NextFunction) => {
-    const slug = asString(req.params.slug as string | string[] | undefined);
+    const slug = req.params.slug as string;
 
     try {
       const tenant = await prisma.tenant.findUnique({
@@ -42,16 +38,15 @@ router.get(
   }
 );
 
+// GET /api/public/booking/:slug/availability — horários ocupados
 router.get(
   "/booking/:slug/availability",
   async (req: Request, res: Response, next: NextFunction) => {
-    const slug = asString(req.params.slug as string | string[] | undefined);
-    const date = asString(req.query.date as string | string[] | undefined);
-    const barberId = asString(
-      req.query.barberId as string | string[] | undefined
-    );
+    const slug = req.params.slug as string;
+    const date = String(req.query.date);
+    const barberId = String(req.query.barberId);
 
-    if (!date || !barberId) {
+    if (!date || !barberId || date === "undefined" || barberId === "undefined") {
       return res
         .status(400)
         .json({ error: "Data e barbeiro são obrigatórios" });
@@ -93,10 +88,11 @@ router.get(
   }
 );
 
+// POST /api/public/booking/:slug/appointment — criar agendamento público
 router.post(
   "/booking/:slug/appointment",
   async (req: Request, res: Response, next: NextFunction) => {
-    const slug = asString(req.params.slug as string | string[] | undefined);
+    const slug = req.params.slug as string;
 
     const result = bookingSchema.safeParse(req.body);
     if (!result.success) {
@@ -121,19 +117,12 @@ router.post(
       }
 
       let client = await prisma.client.findFirst({
-        where: {
-          phone: clientPhone,
-          tenantId: tenant.id,
-        },
+        where: { phone: clientPhone, tenantId: tenant.id },
       });
 
       if (!client) {
         client = await prisma.client.create({
-          data: {
-            name: clientName,
-            phone: clientPhone,
-            tenantId: tenant.id,
-          },
+          data: { name: clientName, phone: clientPhone, tenantId: tenant.id },
         });
       }
 
