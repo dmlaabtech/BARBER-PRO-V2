@@ -1,4 +1,5 @@
 import { Router, Response, NextFunction } from "express";
+import { z } from "zod";
 import { AuthRequest } from "../../types/express";
 import { authenticateToken } from "../middleware/auth.js";
 import { prisma } from "../lib/prisma.js";
